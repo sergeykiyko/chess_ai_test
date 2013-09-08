@@ -12,12 +12,6 @@ var g_cellSize = 45;
 var g_debug = true;
 var g_timeout = 40;
 
-// 
-// Board code
-//
-
-// This somewhat funky scheme means that a piece is indexed by it's lower 4 bits when accessing in arrays.  The fifth bit (black bit)
-// is used to allow quick edge testing on the board.
 var colorBlack = 0x10;
 var colorWhite = 0x08;
 
@@ -57,10 +51,6 @@ var moveflagPromotion = 0x10 << 16;
 var moveflagPromoteKnight = 0x20 << 16;
 var moveflagPromoteQueen = 0x40 << 16;
 var moveflagPromoteBishop = 0x80 << 16;
-
-//
-// Searching code
-//
 
 var g_startTime;
 
@@ -146,19 +136,16 @@ var emptyAdj =
 
 var pieceSquareAdj = new Array(8);
 
-// Returns the square flipped
 var flipTable = new Array(256);
 
-// Position variables
-var g_board = new Array(256); // Sentinel 0x80, pieces are in low 4 bits, 0x8 for color, 0x7 bits for piece type
-var g_toMove; // side to move, 0 or 8, 0 = black, 8 = white
-var g_castleRights; // bitmask representing castling rights, 1 = wk, 2 = wq, 4 = bk, 8 = bq
+var g_board = new Array(256); 
+var g_toMove; 
+var g_castleRights; 
 var g_enPassentSquare;
 var g_baseEval;
 var g_hashKeyLow, g_hashKeyHigh;
 var g_inCheck;
 
-// Utility variables
 var g_moveCount = 0;
 var g_moveUndoStack = new Array();
 
@@ -177,7 +164,6 @@ var g_zobristHigh;
 var g_zobristBlackLow;
 var g_zobristBlackHigh;
 
-// Evaulation variables
 var g_mobUnit;
 
 var hashflagAlpha = 1;
@@ -243,13 +229,11 @@ function ResetGame() {
         g_vectorDelta[i].pieceMask[0] = 0;
         g_vectorDelta[i].pieceMask[1] = 0;
     }
-    
-    // Initialize the vector delta table    
+       
     for (var row = 0; row < 0x80; row += 0x10) { 
         for (var col = 0; col < 0x8; col++) {
             var square = row | col;
             
-            // Pawn moves
             var index = square - (square - 17) + 128;
             g_vectorDelta[index].pieceMask[colorWhite >> 3] |= (1 << piecePawn);
             index = square - (square - 15) + 128;
@@ -274,10 +258,8 @@ function ResetGame() {
                             flip = 1;
                         
                         if ((square & 0xF0) == (target & 0xF0)) {
-                            // On the same row
                             g_vectorDelta[index].delta = flip * 1;
                         } else if ((square & 0x0F) == (target & 0x0F)) {
-                            // On the same column
                             g_vectorDelta[index].delta = flip * 16;
                         } else if ((square % 15) == (target % 15)) {
                             g_vectorDelta[index].delta = flip * 15;
@@ -301,7 +283,6 @@ function ResetGame() {
     }    
 
     InitializeEval();
-//    InitializeFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     InitializeFromFen(g_fen); 
 }
 
@@ -424,14 +405,12 @@ function MakeTable(table) {
     return result;
 }
 
-//Инициализация оценки позиции
 function InitializeEval() {
     g_mobUnit = new Array(2);
-    // Единицы подвижности фигур
     for (var i = 0; i < 2; i++) {
         g_mobUnit[i] = new Array();
-        var enemy = i == 0 ? 0x10 : 8; // Цвет фигур противника
-        var friend = i == 0 ? 8 : 0x10; // Цвет своих фигур
+        var enemy = i == 0 ? 0x10 : 8; 
+        var friend = i == 0 ? 8 : 0x10; 
         g_mobUnit[i][0] = 1;
         g_mobUnit[i][0x80] = 0;
         g_mobUnit[i][enemy | piecePawn] = 1;
@@ -450,7 +429,6 @@ function InitializeEval() {
 }
 
 function InitializeFromFen(fen) {
-    //Разделение fen на отдельные части (символ-разделитель: пробел)
     var chunks = fen.split(' ');
     
     for (var i = 0; i < 256; i++) 
@@ -567,11 +545,9 @@ function InitializeFromFen(fen) {
     g_move50 = 0;
     g_inCheck = IsSquareAttackable(g_pieceList[(g_toMove | pieceKing) << 4], them);
 
-    // Check for king capture (invalid FEN)
     if (IsSquareAttackable(g_pieceList[(them | pieceKing) << 4], g_toMove)) {
         return 'Invalid FEN: Can capture king';
     }
-    // Checkmate/stalemate
     if (GenerateValidMoves().length == 0) {
         return g_inCheck ? 'Checkmate' : 'Stalemate';
     } 
@@ -583,7 +559,6 @@ function InitializePieceList() {
     for (var i = 0; i < 16; i++) {
         g_pieceCount[i] = 0;
         for (var j = 0; j < 16; j++) {
-            // 0 is used as the terminator for piece lists
             g_pieceList[(i << 4) | j] = 0;
         }
     }
@@ -622,7 +597,6 @@ function SetHash() {
 }
 
 function IsSquareAttackable(target, color) {
-	// Attackable by pawns? (Нападение пешками?)
 	var inc = color ? -16 : 16;
 	var pawn = (color ? colorWhite : colorBlack) | 1;
 	if (g_board[target - (inc - 1)] == pawn)
@@ -630,7 +604,6 @@ function IsSquareAttackable(target, color) {
 	if (g_board[target - (inc + 1)] == pawn)
 		return true;
 	
-	// Attackable by pieces? (Нападение фигурами?)
 	for (var i = 2; i <= 6; i++) {
         var index = (color | i) << 4;
         var square = g_pieceList[index];
@@ -647,8 +620,6 @@ function IsSquareAttackableFrom(target, from){
     var index = from - target + 128;
     var piece = g_board[from];
     if (g_vectorDelta[index].pieceMask[(piece >> 3) & 1] & (1 << (piece & 0x7))) {
-        // Yes, this square is pseudo-attackable.  Now, check for real attack
-        //(Да, это поле является псевдо-уязвимым. Теперь проверьте реальность атаки)
 		var inc = g_vectorDelta[index].delta;
         do {
 			from += inc;
@@ -681,7 +652,6 @@ function GenerateCaptureMoves(moveStack, moveScores) {
     var inc = (g_toMove == 8) ? -16 : 16;
     var enemy = g_toMove == 8 ? 0x10 : 0x8;
 
-    // Pawn captures (Взятия пешками)
     pieceIdx = (g_toMove | 1) << 4;
     from = g_pieceList[pieceIdx++];
     while (from != 0) {
@@ -713,7 +683,6 @@ function GenerateCaptureMoves(moveStack, moveScores) {
         }
     }
 
-    // Knight captures (Взятия конями)
 	pieceIdx = (g_toMove | 2) << 4;
 	from = g_pieceList[pieceIdx++];
 	while (from != 0) {
@@ -728,7 +697,6 @@ function GenerateCaptureMoves(moveStack, moveScores) {
 		from = g_pieceList[pieceIdx++];
 	}
 	
-	// Bishop captures (Взятия слонами)
 	pieceIdx = (g_toMove | 3) << 4;
 	from = g_pieceList[pieceIdx++];
 	while (from != 0) {
@@ -739,7 +707,6 @@ function GenerateCaptureMoves(moveStack, moveScores) {
 		from = g_pieceList[pieceIdx++];
 	}
 	
-	// Rook captures (Взятия ладьями)
 	pieceIdx = (g_toMove | 4) << 4;
 	from = g_pieceList[pieceIdx++];
 	while (from != 0) {
@@ -750,7 +717,6 @@ function GenerateCaptureMoves(moveStack, moveScores) {
 		from = g_pieceList[pieceIdx++];
 	}
 	
-	// Queen captures (Взятия ферзем)
 	pieceIdx = (g_toMove | 5) << 4;
 	from = g_pieceList[pieceIdx++];
 	while (from != 0) {
@@ -765,7 +731,6 @@ function GenerateCaptureMoves(moveStack, moveScores) {
 		from = g_pieceList[pieceIdx++];
 	}
 	
-	// King captures (Взятия королем)
 	{
 		pieceIdx = (g_toMove | 6) << 4;
 		from = g_pieceList[pieceIdx];
@@ -804,7 +769,6 @@ function GenerateMove(from, to, flags){
 function GenerateAllMoves(moveStack) {
     var from, to, piece, pieceIdx;
 
-	// Pawn quiet moves (тихие ходы пешкой)
     pieceIdx = (g_toMove | 1) << 4;
     from = g_pieceList[pieceIdx++];
     while (from != 0) {
@@ -812,7 +776,6 @@ function GenerateAllMoves(moveStack) {
         from = g_pieceList[pieceIdx++];
     }
 
-    // Knight quiet moves (тихие ходы коня)
 	pieceIdx = (g_toMove | 2) << 4;
 	from = g_pieceList[pieceIdx++];
 	while (from != 0) {
@@ -827,7 +790,6 @@ function GenerateAllMoves(moveStack) {
 		from = g_pieceList[pieceIdx++];
 	}
 
-	// Bishop quiet moves (тихие ходы слона)
 	pieceIdx = (g_toMove | 3) << 4;
 	from = g_pieceList[pieceIdx++];
 	while (from != 0) {
@@ -838,7 +800,6 @@ function GenerateAllMoves(moveStack) {
 		from = g_pieceList[pieceIdx++];
 	}
 
-	// Rook quiet moves (тихие ходы ладьи)
 	pieceIdx = (g_toMove | 4) << 4;
 	from = g_pieceList[pieceIdx++];
 	while (from != 0) {
@@ -849,7 +810,6 @@ function GenerateAllMoves(moveStack) {
 		from = g_pieceList[pieceIdx++];
 	}
 	
-	// Queen quiet moves (тихие ходы ферзя)
 	pieceIdx = (g_toMove | 5) << 4;
 	from = g_pieceList[pieceIdx++];
 	while (from != 0) {
@@ -864,7 +824,6 @@ function GenerateAllMoves(moveStack) {
 		from = g_pieceList[pieceIdx++];
 	}
 	
-	// King quiet moves (тихие ходы короля)
 	{
 		pieceIdx = (g_toMove | 6) << 4;
 		from = g_pieceList[pieceIdx];
@@ -882,13 +841,11 @@ function GenerateAllMoves(moveStack) {
             if (!g_toMove) 
                 castleRights >>= 2;
             if (castleRights & 1) {
-                // Kingside castle (Короткая рокировка)
                 if (g_board[from + 1] == pieceEmpty && g_board[from + 2] == pieceEmpty) {
                     moveStack[moveStack.length] = GenerateMove(from, from + 0x02, moveflagCastleKing);
                 }
             }
             if (castleRights & 2) {
-                // Queenside castle (Длинная рокировка)
                 if (g_board[from - 1] == pieceEmpty && g_board[from - 2] == pieceEmpty && g_board[from - 3] == pieceEmpty) {
                     moveStack[moveStack.length] = GenerateMove(from, from - 0x02, moveflagCastleQueen);
                 }
@@ -913,12 +870,10 @@ function GeneratePawnMoves(moveStack, from) {
     var color = piece & colorWhite;
     var inc = (color == colorWhite) ? -16 : 16;
     
-	// Quiet pawn moves
 	var to = from + inc;
 	if (g_board[to] == 0) {
 		MovePawnTo(moveStack, from, to, pieceEmpty);
 		
-		// Check if we can do a 2 square jump
 		if ((((from & 0xF0) == 0x30) && color != colorWhite) ||
 		    (((from & 0xF0) == 0x80) && color == colorWhite)) {
 			to += inc;
@@ -931,7 +886,7 @@ function GeneratePawnMoves(moveStack, from) {
 
 function MakeMove(move){
     var me = g_toMove >> 3;
-	var otherColor = 8 - g_toMove; //Цвет фигур противника 
+	var otherColor = 8 - g_toMove;  
     
     var flags = move & 0xFF0000;
     var to = (move >> 8) & 0xFF;
@@ -947,15 +902,15 @@ function MakeMove(move){
     }
 
     g_moveUndoStack[g_moveCount] = new UndoHistory(g_enPassentSquare, g_castleRights, g_inCheck, g_baseEval, g_hashKeyLow, g_hashKeyHigh, g_move50, captured);
-    g_moveCount++; //Увеличение на 1 счетчика ходов
+    g_moveCount++; 
 
-    g_enPassentSquare = -1; //Бойного поля нет
+    g_enPassentSquare = -1;
 
     if (flags) {
-        if (flags & moveflagCastleKing) { //Если короткая рокировка
+        if (flags & moveflagCastleKing) { 
             if (IsSquareAttackable(from + 1, otherColor) ||
             	IsSquareAttackable(from + 2, otherColor)) {
-                g_moveCount--; //Уменьшение на 1 счетчика ходов
+                g_moveCount--; 
                 return false;
             }
             
@@ -1001,8 +956,7 @@ function MakeMove(move){
         }
     }
 
-    if (captured) { //Если ход со взятием фигуры
-        // Remove our piece from the piece list (Удаление своей фигуры из списка фигур)
+    if (captured) { 
         var capturedType = captured & 0xF;
         g_pieceCount[capturedType]--;
         var lastPieceSquare = g_pieceList[(capturedType << 4) | g_pieceCount[capturedType]];
@@ -1036,7 +990,6 @@ function MakeMove(move){
 
     g_baseEval -= pieceSquareAdj[piece & 0x7][me == 0 ? flipTable[from] : from];
     
-    // Move our piece in the piece list (Перемещение своей фигуры в список фигур)
     g_pieceIndex[to] = g_pieceIndex[from];
     g_pieceList[((piece & 0xF) << 4) | g_pieceIndex[to]] = to;
 
@@ -1109,17 +1062,12 @@ function MakeMove(move){
     if (flags <= moveflagEPC) {
         var theirKingPos = g_pieceList[(pieceKing | g_toMove) << 4];
         
-        // First check if the piece we moved can attack the enemy king
-        //(Сначала проверяем, может ли атаковать короля противника фигура,которой мы походили)
         g_inCheck = IsSquareAttackableFrom(theirKingPos, to);
         
         if (!g_inCheck) {
-            // Now check if the square we moved from exposes check on the enemy king
-            //(Теперь проверяем, подвергает ли опасности шаха короля противника покинутое нами поле)
             g_inCheck = ExposesCheck(from, theirKingPos);
             
             if (!g_inCheck) {
-                // Finally, ep. capture can cause another square to be exposed
                 if (epcEnd != to) {
                     g_inCheck = ExposesCheck(epcEnd, theirKingPos);
                 }
@@ -1127,7 +1075,6 @@ function MakeMove(move){
         }
     }
     else {
-        // Castle or promotion, slow check (Рокировка или превращение, тихий шах)
         g_inCheck = IsSquareAttackable(g_pieceList[(pieceKing | g_toMove) << 4], 8 - g_toMove);
     }
 
@@ -1150,7 +1097,6 @@ function UndoHistory(ep, castleRights, inCheck, baseEval, hashKeyLow, hashKeyHig
 
 function ExposesCheck(from, kingPos){
     var index = kingPos - from + 128;
-    // If a queen can't reach it, nobody can! (Если королева не может добраться до него, никто не может!)
     if ((g_vectorDelta[index].pieceMask[0] & (1 << (pieceQueen))) != 0) {
         var delta = g_vectorDelta[index].delta;
         var pos = kingPos + delta;
@@ -1160,20 +1106,17 @@ function ExposesCheck(from, kingPos){
         if (((piece & (g_board[kingPos] ^ 0x18)) & 0x18) == 0)
             return false;
 
-        // Now see if the piece can actually attack the king
-        //(Теперь посмотрим, если на самом деле фигура может атаковать короля)
         var backwardIndex = pos - kingPos + 128;
         return (g_vectorDelta[backwardIndex].pieceMask[(piece >> 3) & 1] & (1 << (piece & 0x7))) != 0;
     }
     return false;
 }
 
-//Восстановление позиции
 function UnmakeMove(move){
-    g_toMove = 8 - g_toMove; //Изменение очередности хода
-    g_baseEval = -g_baseEval; //Изменение оценки позиции
+    g_toMove = 8 - g_toMove; 
+    g_baseEval = -g_baseEval; 
     
-    g_moveCount--; //Уменьшение на 1 счетчика числа ходов
+    g_moveCount--; 
     g_enPassentSquare = g_moveUndoStack[g_moveCount].ep;
     g_castleRights = g_moveUndoStack[g_moveCount].castleRights;
     g_inCheck = g_moveUndoStack[g_moveCount].inCheck;
@@ -1182,20 +1125,20 @@ function UnmakeMove(move){
     g_hashKeyHigh = g_moveUndoStack[g_moveCount].hashKeyHigh;
     g_move50 = g_moveUndoStack[g_moveCount].move50;
     
-    var otherColor = 8 - g_toMove; //Цвет фигур противника
+    var otherColor = 8 - g_toMove; 
     var me = g_toMove >> 3;
     var them = otherColor >> 3;
     
     var flags = move & 0xFF0000;
     var captured = g_moveUndoStack[g_moveCount].captured;
-    var to = (move >> 8) & 0xFF; //Поле, на которое ходила фигура
-    var from = move & 0xFF; //Поле, откуда ходила фигура
+    var to = (move >> 8) & 0xFF; 
+    var from = move & 0xFF; 
     
     var piece = g_board[to];
     
     if (flags) {
-        if (flags & moveflagCastleKing) {//Если была короткая рокировка
-        // Перемещение ладьи на исходное поле
+        if (flags & moveflagCastleKing) {
+        
             var rook = g_board[to - 1];
             g_board[to + 1] = rook;
             g_board[to - 1] = pieceEmpty;
@@ -1204,8 +1147,7 @@ function UnmakeMove(move){
             g_pieceIndex[to + 1] = rookIndex;
             g_pieceList[((rook & 0xF) << 4) | rookIndex] = to + 1;
         }
-        else if (flags & moveflagCastleQueen) {//Если была длинная рокировка
-        // Перемещение ладьи на исходное поле
+        else if (flags & moveflagCastleQueen) {
             var rook = g_board[to + 1];
             g_board[to - 2] = rook;
             g_board[to + 1] = pieceEmpty;
@@ -1221,10 +1163,9 @@ function UnmakeMove(move){
         g_board[from] = piece;
 
         var pawnType = g_board[from] & 0xF;
-        var promoteType = g_board[to] & 0xF;// Тип фигуры, в которую превратилась пешка
+        var promoteType = g_board[to] & 0xF;
 
-        g_pieceCount[promoteType]--;// Уменьшение на 1 числа фигур того типа, 
-// Отмена превращения пешки в фигуру
+        g_pieceCount[promoteType]--; 
         var lastPromoteSquare = g_pieceList[(promoteType << 4) | g_pieceCount[promoteType]];
         g_pieceIndex[lastPromoteSquare] = g_pieceIndex[to];
         g_pieceList[(promoteType << 4) | g_pieceIndex[lastPromoteSquare]] = lastPromoteSquare;
@@ -1236,7 +1177,6 @@ function UnmakeMove(move){
     else {
         g_board[from] = g_board[to];
     }
-// Отмена взятия пешки, прошедшей через бойное поле
     var epcEnd = to;
     if (flags & moveflagEPC) {
         if (g_toMove == colorWhite) 
@@ -1248,12 +1188,10 @@ function UnmakeMove(move){
     
     g_board[epcEnd] = captured;
 
-	// Move our piece in the piece list (Перемещение своей фигуры в список фигур)
     g_pieceIndex[from] = g_pieceIndex[to];
     g_pieceList[((piece & 0xF) << 4) | g_pieceIndex[from]] = from;
 
     if (captured) {
-    // Restore our piece to the piece list (Возвращение своей фигуры в список фигур)
         var captureType = captured & 0xF;
         g_pieceIndex[epcEnd] = g_pieceCount[captureType];
         g_pieceList[(captureType << 4) | g_pieceCount[captureType]] = epcEnd;
@@ -1261,62 +1199,11 @@ function UnmakeMove(move){
     }
 }
 
-function EnsureAnalysisStopped() {
-    //Проверка флага анализа позиции и состояния фонового процесса g_backgroundEngine
-    if (g_analyzing && g_backgroundEngine != null) {
-        g_backgroundEngine.terminate();//Завершение фонового процесса g_backgroundEngine
-        g_backgroundEngine = null;
-    }
-}
-
-function UIAnalyzeToggle() {
-    if (InitializeBackgroundEngine()) {
-        if (!g_analyzing) {
-            g_backgroundEngine.postMessage("analyze");
-        } else {
-            EnsureAnalysisStopped();
-        }
-        g_analyzing = !g_analyzing;
-        document.getElementById("AnalysisToggleLink").innerText = g_analyzing ? "Analysis: On" : "Analysis: Off";
-    } else {
-        alert("Your browser must support web workers for analysis - (chrome4, ff4, safari)");
-    }
-}
-
-function UIChangeFEN() {
-    if (!g_changingFen) {
-        var fenTextBox = document.getElementById("FenTextBox");
-        var result = InitializeFromFen(fenTextBox.value);
-        if (result.length != 0) {
-            UpdatePVDisplay(result);
-            return;
-        } else {
-            UpdatePVDisplay('');
-        }        g_allMoves = [];
-
-        EnsureAnalysisStopped();
-        InitializeBackgroundEngine();
-
-        g_playerWhite = !!g_toMove;
-        g_backgroundEngine.postMessage("position " + GetFen());
-
-        RedrawBoard();
-    }
-}
-
-function UIChangeStartPlayer() {
-    g_playerWhite = !g_playerWhite;//Изменение цвета фигур
-    RedrawBoard();//Перерисовка шахматной доски
-}
-
-//Обновление записи шахматной партии
 function UpdatePgnTextBox(move) {
     var pgnTextBox = document.getElementById("PgnTextBox");
-//    if (g_toMove != 0) { //Если ход белых ***
-        pgnTextBox.value += moveNumber + ". "; //Запись номера хода
+        pgnTextBox.value += moveNumber + ". "; 
         moveNumber++;
-//    } ***
-    pgnTextBox.value += GetMoveSAN(move) + " "; //Запись хода
+    pgnTextBox.value += GetMoveSAN(move) + " "; 
     var z=suggestMoves.length;
     suggestMoves[suggestMoves.length]=move;
 }
@@ -1384,52 +1271,18 @@ function GetMoveSAN(move, validMoves) {
 	return result;
 }
 
-//Изменение времени на ход
-function UIChangeTimePerMove() {
-    var timePerMove = document.getElementById("TimePerMove");
-    g_timeout = parseInt(timePerMove.value, 10);
-}
-
-//Окончательный ход
 function FinishMove(bestMove, value, timeTaken, ply) { 
     if (bestMove != null) {
         UIPlayMove(bestMove, BuildPVMessage(bestMove, value, timeTaken, ply));
     } else {
-        alert("Checkmate!"); //Шах и мат!
+        alert("Checkmate!"); 
     }
 }
 
 function UIPlayMove(move, pv) {
-    UpdatePgnTextBox(move); //Добавление хода в запись шахматной партии
-// alert("2");
+    UpdatePgnTextBox(move); 
     g_allMoves[g_allMoves.length] = move;
-//    MakeMove(move);
-// alert("3");
     UpdatePVDisplay(pv);
-// alert("4");
-//    UpdateFromMove(move); //Обновление расположения фигур на шахматной доске ***
-}
-
-//Аннулирование хода
-function UIUndoMove() {
-  if (g_allMoves.length == 0) {
-    return;
-  }
-
-  if (g_backgroundEngine != null) {
-    g_backgroundEngine.terminate();
-    g_backgroundEngine = null;
-  }
-
-  UnmakeMove(g_allMoves[g_allMoves.length - 1]);
-  g_allMoves.pop();
-
-  if (g_playerWhite != !!g_toMove && g_allMoves.length != 0) {
-    UnmakeMove(g_allMoves[g_allMoves.length - 1]);
-    g_allMoves.pop();
-  }
-
-  RedrawBoard();
 }
 
 function UpdatePVDisplay(pv) {
@@ -1440,24 +1293,6 @@ function UpdatePVDisplay(pv) {
         }
         outputDiv.appendChild(document.createTextNode(pv));
     }
-}
-
-function SearchAndRedraw() {
-    alert("SearchAndRedraw1");
-  //  if (g_analyzing) {
-  //      EnsureAnalysisStopped();
-  //      InitializeBackgroundEngine();
-  //      g_backgroundEngine.postMessage("position " + GetFen());
-  //      g_backgroundEngine.postMessage("analyze");
- //       return;
-  //  }
-
-//    if (InitializeBackgroundEngine()) { ***
-//        g_backgroundEngine.postMessage("search " + g_timeout); ***
-//    } *** 
-//    else { ***
-	    Search(FinishMove, 99, null);
-//    } ***
 }
 
 function Search(finishMoveCallback, maxPly, finishPlyCallback) {
@@ -1502,12 +1337,6 @@ function Search(finishMoveCallback, maxPly, finishPlyCallback) {
             finishPlyCallback(bestMove, value, (new Date()).getTime() - g_startTime, i);
         }
     }
-    //   if (bestMove != null) {
-     //       alert("bestMove="+FormatMove(bestMove));
-     //     MakeMove(bestMove);
-      //    FormatMove(bestMove);
- //         i--;
-  //        }
     if (finishMoveCallback != null) {
         finishMoveCallback(bestMove, value, (new Date()).getTime() - g_startTime, i - 1);
     }
@@ -1522,8 +1351,7 @@ function FinishPlyCallback(bestMove, value, timeTaken, ply) {
 
 function BuildPVMessage(bestMove, value, timeTaken, ply) {
     var totalNodes = g_nodeCount + g_qNodeCount;
-    return "Ply:" + ply + " Score:" + value + " Nodes:" + totalNodes + " NPS:" + ((totalNodes / (timeTaken / 1000)) | 0) + " " + PVFromHash(bestMove, 15);
-//return "Ply:" + ply + " Score:" + value + " ";
+    return "Ply:" + ply + " Score:" + value + " "+ PVFromHash(bestMove, 15);
 }
 
 function PVFromHash(move, ply) {
@@ -1581,7 +1409,6 @@ function AlphaBeta(ply, depth, alpha, beta) {
     if (depth > 0 && IsRepDraw())
         return 0;
 
-    // Mate distance pruning
     var oldAlpha = alpha;
     alpha = alpha < minEval + depth ? alpha : minEval + depth;
     beta = beta > maxEval - (depth + 1) ? beta : maxEval - (depth + 1);
@@ -1615,7 +1442,6 @@ function AlphaBeta(ply, depth, alpha, beta) {
         }
 
         if (g_inCheck) {
-            // Check extensions
             plyToSearch++;
         }
 
@@ -1668,12 +1494,9 @@ function AlphaBeta(ply, depth, alpha, beta) {
     }
 
     if (!moveMade) {
-        // If we have no valid moves it's either stalemate or checkmate
         if (inCheck) 
-            // Checkmate.
             return minEval + depth;
         else 
-            // Stalemate
             return 0;
     }
 
@@ -1697,10 +1520,9 @@ function QSearch(alpha, beta, ply) {
     var moveScores = new Array();
     var wasInCheck = g_inCheck;
 
-    if (wasInCheck) { // Если был шах
-        // TODO: Fast check escape generator and fast checking moves generator
-        GenerateCaptureMoves(moves, null); // Генерация ходов со взятиями
-        GenerateAllMoves(moves); // Генерация всех ходов
+    if (wasInCheck) { 
+        GenerateCaptureMoves(moves, null); 
+        GenerateAllMoves(moves); 
 
         for (var i = 0; i < moves.length; i++) {
             moveScores[i] = ScoreMove(moves[i]);
@@ -1715,7 +1537,6 @@ function QSearch(alpha, beta, ply) {
             moveScores[i] = (captured << 5) - pieceType;
         }
     }
-// Сортировка ходов по убыванию их оценок
     for (var i = 0; i < moves.length; i++) {
         var bestMove = i;
         for (var j = moves.length - 1; j > i; j--) {
@@ -1755,93 +1576,26 @@ function QSearch(alpha, beta, ply) {
             realEval = value;
         }
     }
-
-    /* Disable checks...  Too slow currently
-
-    if (ply == 0 && !wasInCheck) {
-        moves = new Array();
-        GenerateAllMoves(moves);
-
-        for (var i = 0; i < moves.length; i++) {
-            moveScores[i] = ScoreMove(moves[i]);
-        }
-
-        for (var i = 0; i < moves.length; i++) {
-            var bestMove = i;
-            for (var j = moves.length - 1; j > i; j--) {
-                if (moveScores[j] > moveScores[bestMove]) {
-                    bestMove = j;
-                }
-            }
-            {
-                var tmpMove = moves[i];
-                moves[i] = moves[bestMove];
-                moves[bestMove] = tmpMove;
-
-                var tmpScore = moveScores[i];
-                moveScores[i] = moveScores[bestMove];
-                moveScores[bestMove] = tmpScore;
-            }
-
-            if (!MakeMove(moves[i])) {
-                continue;
-            }
-            var checking = g_inCheck;
-            UnmakeMove(moves[i]);
-
-            if (!checking) {
-                continue;
-            }
-
-            if (!See(moves[i])) {
-                continue;
-            }
-            
-            MakeMove(moves[i]);
-
-            var value = -QSearch(-beta, -alpha, ply - 1);
-
-            UnmakeMove(moves[i]);
-
-            if (value > realEval) {
-                if (value >= beta)
-                    return value;
-
-                if (value > alpha)
-                    alpha = value;
-
-                realEval = value;
-            }
-        }
-    }
-    */
-
     return realEval;
 }
 
-// Оценка позиции
 function Evaluate() {
     var curEval = g_baseEval;
 
     var evalAdjust = 0;
-    // Black queen gone, then cancel white's penalty for king movement
     if (g_pieceList[pieceQueen << 4] == 0)
         evalAdjust -= pieceSquareAdj[pieceKing][g_pieceList[(colorWhite | pieceKing) << 4]];
-    // White queen gone, then cancel black's penalty for king movement
     if (g_pieceList[(colorWhite | pieceQueen) << 4] == 0) 
         evalAdjust += pieceSquareAdj[pieceKing][flipTable[g_pieceList[pieceKing << 4]]];
 
-    // Black bishop pair (Пара черных слонов)
     if (g_pieceCount[pieceBishop] >= 2)
         evalAdjust -= 500;
-    // White bishop pair (Пара белых слонов)
     if (g_pieceCount[pieceBishop | colorWhite] >= 2)
         evalAdjust += 500;
 
     var mobility = Mobility(8) - Mobility(0);
 
     if (g_toMove == 0) {
-        // Black (Черные)
         curEval -= mobility;
         curEval -= evalAdjust;
     }
@@ -1853,14 +1607,12 @@ function Evaluate() {
     return curEval;
 }
 
-// Подвижность (маневренность)фигур
 function Mobility(color) {
     var result = 0;
     var from, to, mob, pieceIdx;
-    var enemy = color == 8 ? 0x10 : 0x8 // Цвет фигур противника
+    var enemy = color == 8 ? 0x10 : 0x8 
     var mobUnit = color == 8 ? g_mobUnit[0] : g_mobUnit[1];
 
-    // Knight mobility (Подвижность коней)
     mob = -3;
     pieceIdx = (color | 2) << 4;
     from = g_pieceList[pieceIdx++];
@@ -1877,7 +1629,6 @@ function Mobility(color) {
     }
     result += 65 * mob;
 
-    // Bishop mobility (Подвижность слонов)
     mob = -4;
     pieceIdx = (color | 3) << 4;
     from = g_pieceList[pieceIdx++];
@@ -1922,7 +1673,6 @@ function Mobility(color) {
     }
     result += 44 * mob;
 
-    // Rook mobility (Подвижность ладей)
     mob = -4;
     pieceIdx = (color | 4) << 4;
     from = g_pieceList[pieceIdx++];
@@ -1935,7 +1685,6 @@ function Mobility(color) {
     }
     result += 25 * mob;
 
-    // Queen mobility (Подвижность ферзя)
     mob = -2;
     pieceIdx = (color | 5) << 4;
     from = g_pieceList[pieceIdx++];
@@ -1965,7 +1714,6 @@ function IsRepDraw() {
     return false;
 }
 
-// Сортировщик ходов
 function MovePicker(hashMove, depth, killer1, killer2) {
     this.hashMove = hashMove;
     this.depth = depth;
@@ -1994,16 +1742,14 @@ function MovePicker(hashMove, depth, killer1, killer2) {
             }
 
             if (this.stage == 2) {
-                GenerateCaptureMoves(this.moves, null); // Генерация ходов со взятиями
-                this.moveCount = this.moves.length; // Число ходов со взятиями
+                GenerateCaptureMoves(this.moves, null); 
+                this.moveCount = this.moves.length; 
                 this.moveScores = new Array(this.moveCount);
-                // Move ordering (упорядочение ходов)
                 for (var i = this.atMove; i < this.moveCount; i++) {
                     var captured = g_board[(this.moves[i] >> 8) & 0xFF] & 0x7;
                     var pieceType = g_board[this.moves[i] & 0xFF] & 0x7;
                     this.moveScores[i] = (captured << 5) - pieceType;
                 }
-                // No moves, onto next stage (Нет ходов, на следующий этап)
                 if (this.atMove == this.moveCount) this.stage++;
             }
 
@@ -2030,16 +1776,13 @@ function MovePicker(hashMove, depth, killer1, killer2) {
             }
 
             if (this.stage == 5) {
-                GenerateAllMoves(this.moves); // Генерация тихих ходов
-                this.moveCount = this.moves.length; // Число тихих ходов
-                // Move ordering (упорядочение ходов)
+                GenerateAllMoves(this.moves); 
+                this.moveCount = this.moves.length; 
                 for (var i = this.atMove; i < this.moveCount; i++) this.moveScores[i] = ScoreMove(this.moves[i]);
-                // No moves, onto next stage (Нет ходов, на следующий этап)
                 if (this.atMove == this.moveCount) this.stage++;
             }
 
             if (this.stage == 6) {
-                // Losing captures (Потери взятий))
                 if (this.losingCaptures != null) {
                     for (var i = 0; i < this.losingCaptures.length; i++) {
                         this.moves[this.moves.length] = this.losingCaptures[i];
@@ -2047,7 +1790,6 @@ function MovePicker(hashMove, depth, killer1, killer2) {
                     for (var i = this.atMove; i < this.moveCount; i++) this.moveScores[i] = ScoreMove(this.moves[i]);
                     this.moveCount = this.moves.length;
                 }
-                // No moves, onto next stage (Нет ходов, на следующий этап)
                 if (this.atMove == this.moveCount) this.stage++;
             }
 
@@ -2096,10 +1838,8 @@ function IsHashMoveValid(hashMove) {
     var ourPiece = g_board[from];
     var pieceType = ourPiece & 0x7;
     if (pieceType < piecePawn || pieceType > pieceKing) return false;
-    // Can't move a piece we don't control
     if (g_toMove != (ourPiece & 0x8))
         return false;
-    // Can't move to a square that has something of the same color
     if (g_board[to] != 0 && (g_toMove == (g_board[to] & 0x8)))
         return false;
     if (pieceType == piecePawn) {
@@ -2107,33 +1847,26 @@ function IsHashMoveValid(hashMove) {
             return false;
         }
 
-        // Valid moves are push, capture, double push, promotions
         var dir = to - from;
         if ((g_toMove == colorWhite) != (dir < 0))  {
-            // Pawns have to move in the right direction
             return false;
         }
 
         var row = to & 0xF0;
         if (((row == 0x90 && !g_toMove) ||
              (row == 0x20 && g_toMove)) != (hashMove & moveflagPromotion)) {
-            // Handle promotions
             return false;
         }
 
         if (dir == -16 || dir == 16) {
-            // White/Black push
             return g_board[to] == 0;
         } else if (dir == -15 || dir == -17 || dir == 15 || dir == 17) {
-            // White/Black capture
             return g_board[to] != 0;
         } else if (dir == -32) {
-            // Double white push
             if (row != 0x60) return false;
             if (g_board[to] != 0) return false;
             if (g_board[from - 16] != 0) return false;
         } else if (dir == 32) {
-            // Double black push
             if (row != 0x50) return false;
             if (g_board[to] != 0) return false;
             if (g_board[from + 16] != 0) return false;
@@ -2143,7 +1876,6 @@ function IsHashMoveValid(hashMove) {
 
         return true;
     } else {
-        // This validates that this piece type can actually make the attack
         if (hashMove >> 16) return false;
         return IsSquareAttackableFrom(to, from);
     }
@@ -2167,7 +1899,6 @@ function AllCutNode(ply, depth, beta, allowNull) {
     if (IsRepDraw())
         return 0;
 
-    // Mate distance pruning (Сокращение расстояния до мата)
     if (minEval + depth >= beta)
        return beta;
 
@@ -2181,7 +1912,6 @@ function AllCutNode(ply, depth, beta, allowNull) {
         if (hashNode.hashDepth >= ply) {
             var hashValue = hashNode.value;
 
-            // Fixup mate scores (Фиксация оценок мата)
             if (hashValue >= maxMateBuffer)
 		hashValue -= depth;
             else if (hashValue <= minMateBuffer)
@@ -2196,13 +1926,10 @@ function AllCutNode(ply, depth, beta, allowNull) {
         }
     }
 
-    // TODO - positional gain? (позиционное усиление?)
-
     if (!g_inCheck &&
         allowNull &&
         beta > minMateBuffer && 
         beta < maxMateBuffer) {
-        // Try some razoring (попробуйте некоторую бритву)
         if (hashMove == null &&
             ply < 4) {
             var razorMargin = 2500 + 200 * ply;
@@ -2214,13 +1941,8 @@ function AllCutNode(ply, depth, beta, allowNull) {
             }
         }
         
-        // TODO - static null move
-
-        // Null move (пустой ход)
         if (ply > 1 &&
             g_baseEval >= beta - (ply >= 4 ? 2500 : 0) &&
-            // Disable null move if potential zugzwang (no big pieces)
-            // Отключение пустого хода в случае потенциального цугцванга (нет больших фигур)
             (g_pieceCount[pieceBishop | g_toMove] != 0 ||
              g_pieceCount[pieceKnight | g_toMove] != 0 ||
              g_pieceCount[pieceRook | g_toMove] != 0 ||
@@ -2267,33 +1989,9 @@ function AllCutNode(ply, depth, beta, allowNull) {
         var doFullSearch = true;
 
         if (g_inCheck) {
-            // Check extensions
             plyToSearch++;
         } else {
             var reduced = plyToSearch - (movePicker.atMove > 14 ? 2 : 1);
-
-            // Futility pruning
-/*            if (movePicker.stage == 5 && !inCheck) {
-                if (movePicker.atMove >= (15 + (1 << (5 * ply) >> 2)) &&
-                    realEval > minMateBuffer) {
-                    UnmakeMove(currentMove);
-                    continue;
-                }
-
-                if (ply < 7) {
-                    var reducedPly = reduced <= 0 ? 0 : reduced;
-                    var futilityValue = -g_baseEval + (900 * (reducedPly + 2)) - (movePicker.atMove * 10);
-                    if (futilityValue < beta) {
-                        if (futilityValue > realEval) {
-                            realEval = futilityValue;
-                        }
-                        UnmakeMove(currentMove);
-                        continue;
-                    }
-                }
-            }*/
-
-            // Late move reductions (Сокращение недавнего хода)
             if (movePicker.stage == 5 && movePicker.atMove > 5 && ply >= 3) {
                 value = -AllCutNode(reduced, depth + 1, -(beta - 1), true);
                 doFullSearch = (value >= beta);
@@ -2338,12 +2036,9 @@ function AllCutNode(ply, depth, beta, allowNull) {
     }
 
     if (!moveMade) {
-        // If we have no valid moves it's either stalemate or checkmate
         if (g_inCheck)
-            // Checkmate.
             return minEval + depth;
         else 
-            // Stalemate
             return 0;
     }
 
@@ -2368,14 +2063,13 @@ function HashEntry(lock, value, flags, hashDepth, bestMove, globalPly) {
     this.bestMove = bestMove;
 }
 
-// Оценка хода
 function ScoreMove(move){
-    var moveTo = (move >> 8) & 0xFF; // Поле, куда ходит фигура
-    var captured = g_board[moveTo] & 0x7; // Тип взятой фигуры противника
-    var piece = g_board[move & 0xFF];// Код ходившей фигуры
+    var moveTo = (move >> 8) & 0xFF; 
+    var captured = g_board[moveTo] & 0x7; 
+    var piece = g_board[move & 0xFF];
     var score;
-    if (captured != 0) { // Если взятие
-        var pieceType = piece & 0x7; // Тип ходившей фигуры
+    if (captured != 0) { 
+        var pieceType = piece & 0x7; 
         score = (captured << 5) - pieceType;
     } else {
         score = historyTable[piece & 0xF][moveTo];
@@ -2383,7 +2077,6 @@ function ScoreMove(move){
     return score;
 }
 
-//Алгоритм, рассматривающий только победившие или равные взятия
 function See(move) {
     var from = move & 0xFF;
     var to = (move >> 8) & 0xFF;
@@ -2398,17 +2091,13 @@ function See(move) {
     }
 
     if (move >> 16) {
-        // Castles, promotion, ep are always good
         return true;
     }
 
     var us = (fromPiece & colorWhite) ? colorWhite : 0;
     var them = 8 - us;
 
-    // Pawn attacks (Пешка нападает)
-    // If any opponent pawns can capture back, this capture is probably not worthwhile (as we must be using knight or above).
-    // Если какие-нибудь пешки противника могут захватить обратно, это взятие вероятно не стоит
-    var inc = (fromPiece & colorWhite) ? -16 : 16; // Note: this is capture direction from to, so reversed from normal move direction
+    var inc = (fromPiece & colorWhite) ? -16 : 16; 
     if (((g_board[to + inc + 1] & 0xF) == (piecePawn | them)) ||
         ((g_board[to + inc - 1] & 0xF) == (piecePawn | them))) {
         return false;
@@ -2416,16 +2105,12 @@ function See(move) {
 
     var themAttacks = new Array();
 
-    // Knight attacks (Конь нападает) 
-    // If any opponent knights can capture back, and the deficit we have to make up is greater than the knights value, 
-    // it's not worth it.  We can capture on this square again, and the opponent doesn't have to capture back. 
     var captureDeficit = fromValue - toValue;
     SeeAddKnightAttacks(to, them, themAttacks);
     if (themAttacks.length != 0 && captureDeficit > g_seeValues[pieceKnight]) {
         return false;
     }
 
-    // Slider attacks (Атаки дальнобойных фигур)
     g_board[from] = 0;
     for (var pieceType = pieceBishop; pieceType <= pieceQueen; pieceType++) {
         if (SeeAddSliderAttacks(to, them, themAttacks, pieceType)) {
@@ -2436,20 +2121,14 @@ function See(move) {
         }
     }
 
-    // Pawn defenses (Пешечные защиты)
-    // At this point, we are sure we are making a "losing" capture.  The opponent can not capture back with a 
-    // pawn.  They cannot capture back with a minor/major and stand pat either.  So, if we can capture with 
-    // a pawn, it's got to be a winning or equal capture. 
     if (((g_board[to - inc + 1] & 0xF) == (piecePawn | us)) ||
         ((g_board[to - inc - 1] & 0xF) == (piecePawn | us))) {
         g_board[from] = fromPiece;
         return true;
     }
 
-    // King attacks (Король нападает)
     SeeAddSliderAttacks(to, them, themAttacks, pieceKing);
 
-    // Our attacks (Наши атаки)
     var usAttacks = new Array();
     SeeAddKnightAttacks(to, us, usAttacks);
     for (var pieceType = pieceBishop; pieceType <= pieceKing; pieceType++) {
@@ -2458,17 +2137,12 @@ function See(move) {
 
     g_board[from] = fromPiece;
 
-    // We are currently winning the amount of material of the captured piece, time to see if the opponent 
-    // can get it back somehow.  We assume the opponent can capture our current piece in this score, which 
-    // simplifies the later code considerably. 
     var seeValue = toValue - fromValue;
 
     for (; ; ) {
         var capturingPieceValue = 1000;
         var capturingPieceIndex = -1;
 
-        // Find the least valuable piece of the opponent that can attack the square
-        // Поиск наименее ценной фигуры противника, которая может атаковать поле
         for (var i = 0; i < themAttacks.length; i++) {
             if (themAttacks[i] != 0) {
                 var pieceValue = g_seeValues[g_board[themAttacks[i]] & 0x7];
@@ -2480,14 +2154,9 @@ function See(move) {
         }
 
         if (capturingPieceIndex == -1) {
-            // Opponent can't capture back, we win (Противник не может взять обратно, мы победим)
             return true;
         }
 
-        // Now, if seeValue < 0, the opponent is winning.  If even after we take their piece, 
-        // we can't bring it back to 0, then we have lost this battle.
-        // Теперь, если seeValue <0, противник выигрывает. Если даже после того, как мы берем их
-        // фигуру, мы не можем вернуть его в 0, то мы потеряли эту битву.
         seeValue += capturingPieceValue;
         if (seeValue < 0) {
             return false;
@@ -2496,15 +2165,11 @@ function See(move) {
         var capturingPieceSquare = themAttacks[capturingPieceIndex];
         themAttacks[capturingPieceIndex] = 0;
 
-        // Add any x-ray attackers
         SeeAddXrayAttack(to, capturingPieceSquare, us, usAttacks, themAttacks);
 
-        // Our turn to capture
         capturingPieceValue = 1000;
         capturingPieceIndex = -1;
 
-        // Find our least valuable piece that can attack the square
-        // Поиск наименее ценной своей фигуры, которая может атаковать поле
         for (var i = 0; i < usAttacks.length; i++) {
             if (usAttacks[i] != 0) {
                 var pieceValue = g_seeValues[g_board[usAttacks[i]] & 0x7];
@@ -2516,14 +2181,9 @@ function See(move) {
         }
 
         if (capturingPieceIndex == -1) {
-            // We can't capture back, we lose :( (Мы не можем взять обратно, мы теряем)
             return false;
         }
 
-        // Assume our opponent can capture us back, and if we are still winning, we can stand-pat 
-        // here, and assume we've won. 
-        // Предположим, наш противник может обратно захватить нас, и если мы по-прежнему завоевываем, мы можем 
-        // стоять здесь-PAT, и предположим, что мы выиграли.
         seeValue -= capturingPieceValue;
         if (seeValue >= 0) {
             return true;
@@ -2532,12 +2192,10 @@ function See(move) {
         capturingPieceSquare = usAttacks[capturingPieceIndex];
         usAttacks[capturingPieceIndex] = 0;
 
-        // Add any x-ray attackers
         SeeAddXrayAttack(to, capturingPieceSquare, us, usAttacks, themAttacks);
     }
 }
 
-// target = attacking square, us = color of knights to look for, attacks = array to add squares to
 function SeeAddKnightAttacks(target, us, attacks) {
     var pieceIdx = (us | pieceKnight) << 4;
     var attackerSq = g_pieceList[pieceIdx++];
@@ -2591,46 +2249,6 @@ function SeeAddXrayAttack(target, square, us, usAttacks, themAttacks) {
     }
 }
 
-
-var g_backgroundEngineValid = true;
-var g_backgroundEngine;
-function InitializeBackgroundEngine() {
-    if (!g_backgroundEngineValid) {
-        return false;
-    }
-
-    if (g_backgroundEngine == null) {
-        g_backgroundEngineValid = true;
-        try {
-            g_backgroundEngine = new Worker("js/garbochess.js");
- //           g_backgroundEngine.postMessage(g_fen); //zzz
-            g_backgroundEngine.onmessage = function (e) {
-                if (e.data.match("^pv") == "pv") {
-                    UpdatePVDisplay(e.data.substr(3, e.data.length - 3));
-//                } else if (e.data.match("^fen") == "fen") {
-//                    alert("edata="+e.data);
-                } else if (e.data.match("^message") == "message") {
-                    EnsureAnalysisStopped();
-                    UpdatePVDisplay(e.data.substr(8, e.data.length - 8));
-                } else {
-                    alert("edata="+e.data);
-//suggestMove[suggestMove.length]=e.data;
-//alert("gMove="+suggestMove[suggestMove.length-1]);
-                    UIPlayMove(GetMoveFromString(e.data), null);
-                }
-            }
-            g_backgroundEngine.error = function (e) {
-                alert("Error from background worker:" + e.message);
-            }
-            g_backgroundEngine.postMessage("position " + GetFen());
-        } catch (error) {
-            g_backgroundEngineValid = false;
-        }
-    }
-
-    return g_backgroundEngineValid;
-}
-
 function GetMoveFromString(moveString) {
     var moves = GenerateValidMoves();
     for (var i = 0; i < moves.length; i++) {
@@ -2641,59 +2259,52 @@ function GetMoveFromString(moveString) {
     alert("busted! ->" + moveString + " fen:" + GetFen());
 }
 
-//Обновление расположения фигур на шахматной доске после хода
 function UpdateFromMove(move) {
-    var fromX = (move & 0xF) - 4;//Вертикаль клетки, откуда ходит фигура(0...7)
-    var fromY = ((move >> 4) & 0xF) - 2;//Горизонталь клетки, откуда ходит фигура
-    var toX = ((move >> 8) & 0xF) - 4;//Вертикаль клетки, куда ходит фигура
-    var toY = ((move >> 12) & 0xF) - 2;//Горизонталь клетки, куда ходит фигура
-    //Если играем черными
+    var fromX = (move & 0xF) - 4;
+    var fromY = ((move >> 4) & 0xF) - 2;
+    var toX = ((move >> 8) & 0xF) - 4;
+    var toY = ((move >> 12) & 0xF) - 2;
     if (!g_playerWhite) {
         fromY = 7 - fromY;
         toY = 7 - toY;
         fromX = 7 - fromX;
         toX = 7 - toX;
     }
-//Перерисовка фигур в случаях: 1)рокировки; 2)взятия пешки, прошедшей через
-//бойное поле пешки противника; 3)превращения проходной пешки в фигуру
     if ((move & moveflagCastleKing) ||
         (move & moveflagCastleQueen) ||
         (move & moveflagEPC) ||
         (move & moveflagPromotion)) {
         RedrawPieces();
     } else {
-        var fromSquare = g_uiBoard[fromY * 8 + fromX];//Клетка, откуда ходит фигура
-        $(g_uiBoard[toY * 8 + toX])//Клетка, куда ходит фигура
-            .empty()//Удаление содержимого клетки доски, куда ходит фигура
-            .append($(fromSquare).children());//Перемещение фигуры
+        var fromSquare = g_uiBoard[fromY * 8 + fromX];
+        $(g_uiBoard[toY * 8 + toX])
+            .empty()
+            .append($(fromSquare).children());
     }
 }
 
 function RedrawPieces() {
-    //Перерисовка фигур в случае спокойного хода или хода со взятием
-    for (y = 0; y < 8; ++y) {//Цикл по горизонталям
-        for (x = 0; x < 8; ++x) {//Цикл по вертикалям
-            var td = g_uiBoard[y * 8 + x];//Текущая клетка доски
+    
+    for (y = 0; y < 8; ++y) {
+        for (x = 0; x < 8; ++x) {
+            var td = g_uiBoard[y * 8 + x];
             var pieceY = g_playerWhite ? y : 7 - y;
-            //Получение кода фигуры, находящейся в текущей клетке доски
             var piece = g_board[((pieceY + 2) * 0x10) + (g_playerWhite ? x : 7 - x) + 4];
-            //Формирование имени файла с изображением фигуры
-            var pieceName = null; //Очистка имени файла, содержащего изображение фигуры
+            var pieceName = null; 
             switch (piece & 0x7) {
-                case piecePawn: pieceName = "pawn"; break;//Если пешка, то имя файла начинается с pawn   
-                case pieceKnight: pieceName = "knight"; break;//Если конь, то имя файла начинается с knight
-                case pieceBishop: pieceName = "bishop"; break;//Если слон, то имя файла начинается с bishop
-                case pieceRook: pieceName = "rook"; break;//Если ладья, то имя файла начинается с rook
-                case pieceQueen: pieceName = "queen"; break;//Если ферзь, то имя файла начинается с queen
-                case pieceKing: pieceName = "king"; break;//Если король, то имя файла начинается с king
+                case piecePawn: pieceName = "pawn"; break;   
+                case pieceKnight: pieceName = "knight"; break;
+                case pieceBishop: pieceName = "bishop"; break;
+                case pieceRook: pieceName = "rook"; break;
+                case pieceQueen: pieceName = "queen"; break;
+                case pieceKing: pieceName = "king"; break;
             }
-            if (pieceName != null) {//В клетке есть фигура? 
-                pieceName += "_";//Добавление к имени файла символа подчеркивания
-                //Если фигура - белая, то к имени файла добавляется white, иначе black
+            if (pieceName != null) {
+                pieceName += "_";
                 pieceName += (piece & 0x8) ? "white" : "black";
             }
 
-            if (pieceName != null) {//В клетке есть фигура?
+            if (pieceName != null) {
                 var img = document.createElement("div");
                 $(img).addClass('sprite-' + pieceName);
                 img.style.backgroundImage = "url('img/sprites.png')";
@@ -2701,38 +2312,6 @@ function RedrawPieces() {
                 img.height = g_cellSize;
                 var divimg = document.createElement("div");
                 divimg.appendChild(img);
-//jQuery UI Draggable плагин позволяет перетаскивать узлы структуры DOM с помощью мыши.
-//start - событие наступает с началом перемещения.
-//                $(divimg).draggable({ start: function (e, ui) { ***
-//                    if (g_selectedPiece === null) { ***
-//                        g_selectedPiece = this; ***
-                        //closest('table') - возвращает первый ближайший родительский узел
-//                        var offset = $(this).closest('table').offset(); ***
-//                        g_startOffset = { ***
-//                            left: e.pageX - offset.left, ***
-//                            top: e.pageY - offset.top ***
-//                        }; ***
-//                    } else { ***
-//                        return g_selectedPiece == this; ***
-//                    } ***
-//                }}); ***
-
-//                $(divimg).mousedown(function(e) { ***
-//                    if (g_selectedPiece === null) { ***
-//                        var offset = $(this).closest('table').offset(); ***
-//                        g_startOffset = { ***
-//                            left: e.pageX - offset.left, ***
-//                            top: e.pageY - offset.top ***
-//                        }; ***
-//                        e.stopPropagation(); ***
-//                        g_selectedPiece = this; ***
-//                        g_selectedPiece.style.backgroundImage = "url('img/transpBlue50.png')"; ***
-//                    } else if (g_selectedPiece === this) { ***
-//                        g_selectedPiece.style.backgroundImage = null; ***
-//                        g_selectedPiece = null; ***
-//                    } ***
-//                }); ***
-
                 $(td).empty().append(divimg);
             } else {
                 $(td).empty();
@@ -2742,174 +2321,34 @@ function RedrawPieces() {
 }
 
 function RedrawBoard() {
-    var div = $("#board")[0];//возвращает объект DOM с идентификатором board
+    var div = $("#board")[0];
  
-    var table = document.createElement("table");//Контейнер для элементов таблицы
-    table.cellPadding = "0px";//Отступ от рамки до содержимого ячейки
-    table.cellSpacing = "0px";//Расстояние между ячейками
+    var table = document.createElement("table");
+    table.cellPadding = "0px";
+    table.cellSpacing = "0px";
     $(table).addClass('no-highlight');
 
-    var tbody = document.createElement("tbody");//Элемент для хранения одной или
-                                                //нескольких строк таблицы
-    g_uiBoard = [];//Массив клеток шахматной доски
-//e.pageX и e.pageY - координаты курсора мыши относительно документа
-//$(table).offset().left и $(table).offset().top - координаты левого верхнего угла шахматной доски
-//    var dropPiece = function (e, ui) {//Перемещение фигуры на шахматной доске.***
-    //Функция принимает два аргумента – event (объект события) и ui (специальный объект, 
-    //содержащий информацию о положении перемещаемого объекта)
-        //endX и endY - координаты курсора мыши относительно шахматной доски
-//        var endX = e.pageX - $(table).offset().left; ***
-//        var endY = e.pageY - $(table).offset().top; ***
-        //Вычисление индексов клетки шахматной доски, над которой находится курсор мыши
-//        endX = Math.floor(endX / g_cellSize); ***
-//        endY = Math.floor(endY / g_cellSize); ***
+    var tbody = document.createElement("tbody");
+                                                
+    g_uiBoard = [];
+    for (y = 0; y < 8; ++y) {
+        var tr = document.createElement("tr");
 
-//        var startX = Math.floor(g_startOffset.left / g_cellSize); ***
-//        var startY = Math.floor(g_startOffset.top / g_cellSize); ***
-        //Если играем черными
-//        if (!g_playerWhite) { ***
-//            startY = 7 - startY; ***
-//            endY = 7 - endY; ***
-//            startX = 7 - startX; ***
-//            endX = 7 - endX; ***
-//        } ***
-
-//        var moves = GenerateValidMoves(); ***
-//        var move = null; ***
-//        for (var i = 0; i < moves.length; i++) { ***
-//            if ((moves[i] & 0xFF) == MakeSquare(startY, startX) && ***
-//                ((moves[i] >> 8) & 0xFF) == MakeSquare(endY, endX)) { ***
-//                move = moves[i]; ***
-//            } ***
-//        } ***
-        //Если играем черными
-//        if (!g_playerWhite) { ***
-//            startY = 7 - startY; ***
-//            endY = 7 - endY; ***
-//            startX = 7 - startX; ***
-//            endX = 7 - endX; ***
-//        } ***
-
-//        g_selectedPiece.style.left = 0; ***
-//        g_selectedPiece.style.top = 0; ***
-
-//        if (!(startX == endX && startY == endY) && move != null) { ***
-//            UpdatePgnTextBox(move); ***
-
-//            if (InitializeBackgroundEngine()) { ***
-//                g_backgroundEngine.postMessage(FormatMove(move)); ***
-//            } ***
-
-//            g_allMoves[g_allMoves.length] = move; ***
-//            MakeMove(move); ***
-
-//            UpdateFromMove(move); //Обновление расположения фигур на шахматной доске ***
-
-//            g_selectedPiece.style.backgroundImage = null; ***
-//            g_selectedPiece = null; ***
-
-//            var fen = GetFen();
-//            document.getElementById("FenTextBox").value = fen;
-//
-//            setTimeout("SearchAndRedraw()", 0);
-//        } else {
-//            g_selectedPiece.style.backgroundImage = null;
-//            g_selectedPiece = null;
-//        }
-//    }; ***
-   
-    for (y = 0; y < 8; ++y) {//Цикл по горизонталям доски
-        var tr = document.createElement("tr");//Создание горизонтали доски
-
-        for (x = 0; x < 8; ++x) {//Цикл по клеткам
-            var td = document.createElement("td");//Создание клетки 
-            td.style.width = g_cellSize + "px";//Ширина клетки
-            td.style.height = g_cellSize + "px";//Высота клетки
-            td.style.backgroundColor = ((y ^ x) & 1) ? "#D18947" : "#FFCE9E";//Цвет клетки
-            tr.appendChild(td);//Добавление клетки на горизонталь
-            g_uiBoard[y * 8 + x] = td;//Формирование массива клеток
+        for (x = 0; x < 8; ++x) {
+            var td = document.createElement("td");
+            td.style.width = g_cellSize + "px";
+            td.style.height = g_cellSize + "px";
+            td.style.backgroundColor = ((y ^ x) & 1) ? "#D18947" : "#FFCE9E";
+            tr.appendChild(td);
+            g_uiBoard[y * 8 + x] = td;
         }
 
-        tbody.appendChild(tr);//Добавление к доске горизонтали 
+        tbody.appendChild(tr); 
     }
 
     table.appendChild(tbody);
-    //Плагин Droppable позволяет перемещаемые элементы сбрасывать в какой-либо другой элемент 
-    //drop - событие наступает в момент "сброса" перемещаемого элемента в целевой
-//    $('body').droppable({ drop: dropPiece }); ***
-//    $(table).mousedown(function(e) { ***
-//        if (g_selectedPiece !== null) {//Если выбрана фигура ***
-//            dropPiece(e); ***
-//        } ***
-//    }); ***
-
-    RedrawPieces();//Перерисовка фигур
+    RedrawPieces();
 
     $(div).empty();
     div.appendChild(table);
-
-//    g_changingFen = true; ***
-    //Обновление Fen в текстовом поле FenTextBox
-//    document.getElementById("FenTextBox").value = GetFen(); ***
- //   document.getElementById("FenTextBox").value = g_fen; ***
-//    g_changingFen = false; ***
-}
-
-function GetFen(){
-    var result = ""; //Инициализация Fen пустой строкой
-    for (var row = 0; row < 8; row++) {//Цикл по горизонталям шахматной доски
-        if (row != 0) //Не первая горизонталь?
-            result += '/'; //Добавление разделителя горизонталей
-        var empty = 0; //Обнуление счетчика пустых клеток горизонтали
-        for (var col = 0; col < 8; col++) {//Цикл по вертикалям шахматной доски
-            var piece = g_board[((row + 2) << 4) + col + 4];//Получение кода фигуры,
-                                      //стоящей на клетке, находящейся на пересечении
-                                      //горизонтали row и вертикали col  
-            if (piece == 0) {//Клетка пустая?
-                empty++; //Увеличение на 1 счетчика пустых клеток горизонтали
-            }
-            else {
-                if (empty != 0) //Проверка счетчика
-                    result += empty; //Добавление в Fen числа пустых клеток
-                empty = 0;
-              //Выделение из кода фигуры ее типа  
-                var pieceChar = [" ", "p", "n", "b", "r", "q", "k", " "][(piece & 0x7)];
-                //Добавление в Fen типа фигуры. Если фигура белая, 
-                //то ее тип преобразуется в верхний регистр
-                result += ((piece & colorWhite) != 0) ? pieceChar.toUpperCase() : pieceChar;
-            }
-        }
-        if (empty != 0) {
-            result += empty;
-        }
-    }
-    //Добавление в Fen очередности хода
-    result += g_toMove == colorWhite ? " w" : " b";
-    result += " ";
-    //Добавление в Fen прав на рокировку
-    if (g_castleRights == 0) {
-        result += "-";//Прав на рокировку ни у кого нет
-    }
-    else {
-        if ((g_castleRights & 1) != 0) 
-            result += "K";//Белые имеют право на короткую рокировку
-        if ((g_castleRights & 2) != 0) 
-            result += "Q";//Белые имеют право на длинную рокировку
-        if ((g_castleRights & 4) != 0) 
-            result += "k";//Черные имеют право на короткую рокировку
-        if ((g_castleRights & 8) != 0) 
-            result += "q";//Черные имеют право на длинную рокировку
-    }
-    
-    result += " ";
-    //Добавление в Fen кода бойного поля, через которое прошла пешка
-    if (g_enPassentSquare == -1) {
-        result += '-';//Пешка не проходила через бойное поле
-    }
-    else {
-        //Пешка прошла через бойное поле 
-        result += FormatSquare(g_enPassentSquare);
-    }
-    
-    return result;
 }
